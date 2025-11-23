@@ -78,7 +78,7 @@ export const WeatherEffects = () => {
   const particles = useMemo(() => {
     return new Array(count).fill(0).map(() => ({
         x: (Math.random() - 0.5) * 50,
-        y: 0.5 + Math.random() * 4,
+        y: 2.0 + Math.random() * 5, // Raised to avoid clipping with sea waves
         z: (Math.random() - 0.5) * 50,
         speed: 0.2 + Math.random() * 0.5,
         len: 1 + Math.random() * 3
