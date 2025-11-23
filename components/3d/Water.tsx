@@ -14,11 +14,12 @@ const vertexShader = `
     vUv = uv;
     vec3 pos = position;
     
-    // Gentle rolling waves
-    float wave1 = sin(pos.x * 0.2 + uTime * 0.5) * 0.2 * uWaveIntensity;
-    float wave2 = cos(pos.y * 0.2 + uTime * 0.3) * 0.2 * uWaveIntensity;
+    // Stronger, more complex rolling waves
+    float wave1 = sin(pos.x * 0.4 + uTime * 0.8) * 0.3 * uWaveIntensity;
+    float wave2 = cos(pos.y * 0.3 + uTime * 0.6) * 0.2 * uWaveIntensity;
+    float wave3 = sin(pos.x * 0.8 + pos.y * 0.5 + uTime * 1.2) * 0.1 * uWaveIntensity;
     
-    pos.z += wave1 + wave2; // Z is up because of rotation
+    pos.z += wave1 + wave2 + wave3; // Z is up because of rotation
     
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
@@ -42,28 +43,26 @@ const fragmentShader = `
   }
 
   void main() {
-    // Colors
-    vec3 deepBlue = vec3(0.0, 0.3, 0.5); 
-    vec3 turquoise = vec3(0.0, 0.7, 0.9);
+    // Brighter, clearer Aegean colors
+    vec3 deepBlue = vec3(0.0, 0.35, 0.6); 
+    vec3 turquoise = vec3(0.0, 0.8, 0.95);
     
-    float n = noise(vUv * 30.0 + uTime * 0.5);
+    float n = noise(vUv * 20.0 + uTime * 0.4);
     
-    vec3 color = mix(deepBlue, turquoise, n * 0.6);
+    vec3 color = mix(deepBlue, turquoise, n * 0.7);
     
-    // Foam logic
-    float foamNoise = noise(vUv * 80.0 + uTime * 1.5);
+    // Sharp foam edges
+    float foamNoise = noise(vUv * 60.0 + uTime * 1.2);
     float foamLevel = step(uFoamThreshold, foamNoise);
     
-    // Sparkles
-    float sparkles = step(0.98, noise(vUv * 120.0 + uTime * 2.0));
+    // Intense sparkles for sunny look
+    float sparkles = step(0.97, noise(vUv * 100.0 + uTime * 2.5));
     
-    color += foamLevel * 0.8;
-    color += sparkles * 0.5;
+    color += foamLevel * 0.9; // Bright white foam
+    color += sparkles * 0.8;
     
-    // Alpha Logic:
-    // Base water is transparent (0.2) to let the Reflector below show through.
-    // Foam and Sparkles are opaque (0.9) to sit on top.
-    float alpha = 0.2 + (foamLevel * 0.7) + (sparkles * 0.7);
+    // Increased alpha to make the color pop over the dark reflector
+    float alpha = 0.4 + (foamLevel * 0.6) + (sparkles * 0.6);
     
     gl_FragColor = vec4(color, alpha);
   }
@@ -78,38 +77,40 @@ export const Water = () => {
 
   useFrame((state, delta) => {
     if (materialRef.current) {
-      targetIntensity.current = weather === 'MELTEMI' ? 3.0 : 1.0;
+      targetIntensity.current = weather === 'MELTEMI' ? 2.5 : 1.0;
       currentIntensity.current = THREE.MathUtils.lerp(currentIntensity.current, targetIntensity.current, delta * 0.5);
 
       materialRef.current.uniforms.uTime.value = state.clock.getElapsedTime();
       materialRef.current.uniforms.uWaveIntensity.value = currentIntensity.current;
-      materialRef.current.uniforms.uFoamThreshold.value = weather === 'MELTEMI' ? 0.82 : 0.95;
+      // Lower threshold = more foam during Meltemi
+      materialRef.current.uniforms.uFoamThreshold.value = weather === 'MELTEMI' ? 0.75 : 0.92;
     }
   });
 
   return (
     <group>
-        {/* LAYER 1: Realistic Reflections (Base) */}
-        {/* Positioned slightly below the waves */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 0]}>
+        {/* LAYER 1: Realistic Reflections (Base) with Distortion */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.4, 0]}>
             <planeGeometry args={[400, 400]} />
             <MeshReflectorMaterial
-                blur={[400, 100]}
-                resolution={512} // Lower resolution for performance on mobile
+                blur={[300, 100]}
+                resolution={512}
                 mixBlur={1}
-                mixStrength={15} // Reflection strength
-                roughness={0.4}
+                mixStrength={10}
+                roughness={0.6}
                 depthScale={1.2}
                 minDepthThreshold={0.4}
                 maxDepthThreshold={1.4}
-                color="#005580" // Deep sea base color
-                metalness={0.6}
+                color="#004970"
+                metalness={0.7}
+                mirror={0.7}
+                distortion={1} // Adds waviness to the reflection
             />
         </mesh>
 
         {/* LAYER 2: Animated Shader (Waves & Foam) */}
-        {/* Transparent overlay to add the "Aegean" style and movement */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.15, 0]} receiveShadow>
+        {/* Transparent overlay that physically moves */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]} receiveShadow>
             <planeGeometry args={[400, 400, 128, 128]} />
             <shaderMaterial
                 ref={materialRef}
@@ -118,10 +119,10 @@ export const Water = () => {
                 uniforms={{
                     uTime: { value: 0 },
                     uWaveIntensity: { value: 1.0 },
-                    uFoamThreshold: { value: 0.95 }
+                    uFoamThreshold: { value: 0.92 }
                 }}
                 transparent
-                depthWrite={false} // Prevents z-fighting with reflector
+                depthWrite={false}
                 side={THREE.DoubleSide}
             />
         </mesh>

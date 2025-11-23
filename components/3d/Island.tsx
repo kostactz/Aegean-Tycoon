@@ -187,16 +187,14 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
     const trees = [];
     const rocks = [];
 
-    // Distinct Logic per Island ID
     const hasWindmill = data.id === 'mykonos' || data.id === 'paros' || data.id === 'ios';
     const hasChurch = data.id === 'tinos' || data.id === 'santorini';
     const isVolcanic = data.id === 'santorini';
-    const isMilos = data.id === 'milos'; // White rocks
-    const isStone = data.id === 'hydra'; // Stone architecture
+    const isMilos = data.id === 'milos'; 
+    const isStone = data.id === 'hydra'; 
     const hasMonastery = data.id === 'amorgos';
     const treeType = data.id === 'hydra' ? 'pine' : 'olive';
 
-    // Houses Distribution
     let houseCount = 4 + (data.level - 1) * 3;
     if (hasWindmill) houseCount -= 1; 
     if (hasMonastery) houseCount -= 2;
@@ -209,9 +207,8 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
       
-      // Height variation: Santorini houses sit high up
       let yPos = 0.1;
-      if (isVolcanic) yPos = 1.2; // On top of cliff
+      if (isVolcanic) yPos = 1.2;
 
       const heightBonus = data.level > 1 && i % 3 === 0 ? 0.3 : 0;
       const height = 0.3 + Math.random() * 0.3 + heightBonus;
@@ -223,7 +220,6 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
       });
     }
 
-    // Trees
     const treeCount = isVolcanic ? 0 : (isStone ? 8 : 4);
     for (let i = 0; i < treeCount; i++) {
         const angle = Math.random() * Math.PI * 2;
@@ -233,7 +229,6 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
         trees.push([x, 0.1, z] as [number, number, number]);
     }
 
-    // Rocks
     for (let i = 0; i < (isVolcanic || isMilos ? 6 : 3); i++) {
         const angle = Math.random() * Math.PI * 2;
         const radius = 1.3 + Math.random() * 0.4;
@@ -245,21 +240,20 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
     return { houses, trees, rocks, hasWindmill, hasChurch, isVolcanic, isStone, hasMonastery, isMilos, treeType };
   }, [data.type, data.level, data.id]);
 
-  // Determine Ground Appearance
-  let groundColor = "#d6d3d1"; // Default Sandy
+  let groundColor = "#d6d3d1"; 
   let groundHeight = 0.5;
   let groundRoughness = 1.0;
 
   if (details.isVolcanic) {
-      groundColor = "#3f1a14"; // Dark Red/Brown (Santorini)
-      groundHeight = 2.5; // Tall Cliffs
+      groundColor = "#3f1a14"; 
+      groundHeight = 2.5; 
   }
   if (details.isMilos) {
-      groundColor = "#f3f4f6"; // White (Sarakiniko)
-      groundRoughness = 0.4; // Smoother
+      groundColor = "#f3f4f6"; 
+      groundRoughness = 0.4; 
   }
   if (details.isStone) {
-      groundColor = "#78716c"; // Darker Grey/Brown (Hydra)
+      groundColor = "#78716c"; 
       groundHeight = 0.8;
   }
 
@@ -295,22 +289,23 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
         {data.type === 'EVENT' && <SeaBuoy data={data} />}
 
         {data.type === 'ISLAND' && (
-            <group>
+            <group position={[0, -0.35, 0]}>
                 {/* Terrain Base */}
-                <mesh castShadow receiveShadow position={[0, (groundHeight / 2) - 0.2, 0]}>
+                {/* Adjusted Y so it sinks slightly into water */}
+                <mesh castShadow receiveShadow position={[0, (groundHeight / 2), 0]}>
                     <cylinderGeometry args={[1 + (data.level * 0.05), 1.2 + (data.level * 0.05), groundHeight, 7]} />
                     <meshStandardMaterial color={groundColor} roughness={groundRoughness} />
                 </mesh>
                 
                 {/* Ownership Ring */}
                 {ownedByColor && (
-                    <mesh position={[0, 0.1, 0]} rotation={[-Math.PI/2, 0, 0]}>
+                    <mesh position={[0, 0.2, 0]} rotation={[-Math.PI/2, 0, 0]}>
                         <ringGeometry args={[1.5, 1.7, 32]} />
                         <meshBasicMaterial color={ownedByColor} />
                     </mesh>
                 )}
 
-                <group position={[0, details.isVolcanic ? groundHeight - 0.5 : 0.25, 0]}>
+                <group position={[0, details.isVolcanic ? groundHeight - 0.2 : 0.4, 0]}>
                     {details.houses.map((h, i) => {
                         if (details.isStone) {
                              return <StoneHouse key={i} position={h.position} scale={h.scale} />;
@@ -331,9 +326,9 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
                     })}
                 </group>
 
-                {details.hasWindmill && <Windmill position={[0.6, 0.5, 0.6]} />}
-                {details.hasChurch && <Church position={details.isVolcanic ? [-0.4, 1.4, 0.2] : [-0.4, 0.3, 0.2]} />}
-                {details.hasMonastery && <Monastery position={[0, 0.6, -0.3]} />}
+                {details.hasWindmill && <Windmill position={[0.6, 0.7, 0.6]} />}
+                {details.hasChurch && <Church position={details.isVolcanic ? [-0.4, 1.6, 0.2] : [-0.4, 0.5, 0.2]} />}
+                {details.hasMonastery && <Monastery position={[0, 0.8, -0.3]} />}
 
                 {details.trees.map((pos, i) => (
                     <Tree key={`tree-${i}`} position={pos} type={details.treeType as 'olive'|'pine'} />
@@ -343,7 +338,7 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
                     <Rock key={`rock-${i}`} position={rock.pos} scale={rock.scale} color={details.isMilos ? '#f3f4f6' : undefined} />
                 ))}
 
-                <mesh position={[0, 0.1, 1.4]} rotation={[0, 0, 0]} receiveShadow>
+                <mesh position={[0, 0.2, 1.4]} rotation={[0, 0, 0]} receiveShadow>
                     <boxGeometry args={[0.5, 0.1, 0.8]} />
                     <meshStandardMaterial color="#57534e" />
                 </mesh>
