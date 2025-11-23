@@ -1,5 +1,45 @@
 
+
 import { Island, Route, GameEventData } from './types';
+
+export const FERRY_CONFIG = {
+    STANDARD: {
+        name: 'Standard Ferry',
+        cost: 0,
+        desc: 'Reliable, slow, smells like diesel.',
+        capacity: 3
+    },
+    SPEEDBOAT: {
+        name: 'Highspeed Dolphin',
+        cost: 500,
+        desc: 'Roll 2 dice, pick the highest.',
+        capacity: 2
+    },
+    CATAMARAN: {
+        name: 'Super Cat',
+        cost: 400,
+        desc: 'Immune to Meltemi winds.',
+        capacity: 4
+    },
+    CARGO: {
+        name: 'Blue Star Cargo',
+        cost: 300,
+        desc: 'Double income when passing Go.',
+        capacity: 6
+    }
+};
+
+export const TOURIST_TICKET_PRICE = 60; // Money earned per tourist dropoff
+
+export const DAY_NIGHT_CYCLE_DURATION = 120 * 1000; // 2 minutes in milliseconds
+
+// Cycle Progress (0-1): 0=Noon, 0.25=Sunset, 0.5=Midnight, 0.75=Sunrise
+export const CYCLE_PHASE = {
+    SUNSET_START: 0.20,
+    SUNSET_END: 0.30,
+    SUNRISE_START: 0.70,
+    SUNRISE_END: 0.80
+};
 
 // Map Configuration
 // Coordinates compacted (0.7x scale) to fix visibility issues while maintaining layout

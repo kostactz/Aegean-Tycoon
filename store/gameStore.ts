@@ -1,7 +1,8 @@
 
+
 import { create } from 'zustand';
-import { ISLANDS, ROUTES, GAME_EVENTS } from '../constants';
-import { Player, Island, Phase, WeatherType, FloatingText, GameEventData } from '../types';
+import { ISLANDS, ROUTES, GAME_EVENTS, FERRY_CONFIG, TOURIST_TICKET_PRICE, DAY_NIGHT_CYCLE_DURATION } from '../constants';
+import { Player, Island, Phase, WeatherType, FloatingText, GameEventData, FerryType } from '../types';
 
 interface GameState {
   phase: Phase;
@@ -9,6 +10,8 @@ interface GameState {
   turnIndex: number;
   currentDay: number; // 1 to 31 (August)
   maxDays: number;
+  timeOfDay: number; // 0-1 range (0=noon, 0.25=sunset, 0.5=midnight, 0.75=sunrise)
+  gameStartTime: number; // Timestamp when game started
   
   // Dice State
   diceValue: number;
@@ -40,11 +43,13 @@ interface GameState {
   chooseDirection: (targetId: string) => void;
   buyProperty: () => void;
   upgradeProperty: () => void;
+  buyFerryUpgrade: (type: FerryType) => void;
   skipTurn: () => void;
   endTurn: () => void;
   triggerEvent: () => void;
   dismissEvent: () => void;
   initializeGame: () => void;
+  setTimeOfDay: (time: number) => void;
   
   // Visuals
   addFloatingText: (text: string, position: [number, number, number], color: string) => void;
@@ -60,8 +65,8 @@ interface GameState {
 }
 
 const INITIAL_PLAYERS: Player[] = [
-  { id: 'p1', name: 'Kamaki', avatarColor: '#ef4444', positionId: 'piraeus', travelDestinationId: null, money: 1000, properties: [], isJailed: false, jailReason: null },
-  { id: 'p2', name: 'Tourist', avatarColor: '#3b82f6', positionId: 'piraeus', travelDestinationId: null, money: 1000, properties: [], isJailed: false, jailReason: null },
+  { id: 'p1', name: 'Kamaki', avatarColor: '#ef4444', positionId: 'piraeus', travelDestinationId: null, money: 1000, properties: [], isJailed: false, jailReason: null, tourists: 0, ferryType: 'STANDARD' },
+  { id: 'p2', name: 'Tourist', avatarColor: '#3b82f6', positionId: 'piraeus', travelDestinationId: null, money: 1000, properties: [], isJailed: false, jailReason: null, tourists: 0, ferryType: 'STANDARD' },
 ];
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -70,6 +75,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   turnIndex: 0,
   currentDay: 1,
   maxDays: 31,
+  timeOfDay: 0,
+  gameStartTime: Date.now(),
   diceValue: 1,
   isDiceRolling: false,
   players: INITIAL_PLAYERS,
@@ -100,7 +107,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           money: 1000,
           properties: [],
           isJailed: false,
-          jailReason: null
+          jailReason: null,
+          tourists: 0,
+          ferryType: 'STANDARD'
       };
       set({ players: [...players, newPlayer] });
   },
@@ -134,7 +143,16 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   initializeGame: () => {
     get().shuffleDeck();
-    set({ phase: 'ROLLING', message: `August 1st. ${get().players[0].name}'s turn!` });
+    set({ 
+        phase: 'ROLLING', 
+        message: `August 1st. ${get().players[0].name}'s turn!`,
+        gameStartTime: Date.now(),
+        timeOfDay: 0
+    });
+  },
+
+  setTimeOfDay: (time: number) => {
+      set({ timeOfDay: time });
   },
 
   rollDice: () => {
@@ -143,6 +161,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const currentPlayer = players[turnIndex];
 
+    // Jail Logic
     if (currentPlayer.isJailed) {
         set({ isDiceRolling: true, message: currentPlayer.jailReason === 'STRIKE' ? "Trying to find a scab boat..." : "Trying to escape traffic..." });
         
@@ -170,21 +189,35 @@ export const useGameStore = create<GameState>((set, get) => ({
         return;
     }
 
-    const rawRoll = Math.floor(Math.random() * 6) + 1;
-    let effectiveRoll = rawRoll;
+    // Normal Roll
+    let roll1 = Math.floor(Math.random() * 6) + 1;
+    let roll = roll1;
+    
+    // Speedboat Logic: Roll 2, pick highest
+    if (currentPlayer.ferryType === 'SPEEDBOAT') {
+        const roll2 = Math.floor(Math.random() * 6) + 1;
+        roll = Math.max(roll1, roll2);
+    }
+    
+    let effectiveRoll = roll;
     let weatherMsg = "";
     
+    // Meltemi Logic
     if (weather === 'MELTEMI') {
-        effectiveRoll = Math.ceil(rawRoll / 2);
-        weatherMsg = " (Meltemi: Half Speed)";
+        if (currentPlayer.ferryType === 'CATAMARAN') {
+            weatherMsg = " (Catamaran ignores wind)";
+        } else {
+            effectiveRoll = Math.ceil(roll / 2);
+            weatherMsg = " (Meltemi: Half Speed)";
+        }
     }
 
-    set({ isDiceRolling: true, diceValue: rawRoll, message: "Rolling..." });
+    set({ isDiceRolling: true, diceValue: roll, message: "Rolling..." });
 
     setTimeout(() => {
       set({ 
         isDiceRolling: false,
-        message: `Rolled a ${rawRoll}${weatherMsg}!`,
+        message: `Rolled a ${roll}${weatherMsg}!`,
         remainingSteps: effectiveRoll, 
         previousIslandId: null, 
         phase: 'MOVING' 
@@ -264,6 +297,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     const movingPlayers = [...players];
     movingPlayers[turnIndex].travelDestinationId = targetId;
     
+    // Determine movement speed based on Ferry Type (Visual only, Logic handles steps)
+    // Speedboat is visually faster? For now keep it synced with camera
+    
     set({ 
         players: movingPlayers,
         phase: 'MOVING', 
@@ -272,7 +308,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         moveStartTime: Date.now() // Start camera/boat sync
     });
 
-    // Increased travel time to 3000ms for larger map
+    // Travel time
+    const travelTime = players[turnIndex].ferryType === 'SPEEDBOAT' ? 2000 : 3000;
+
     setTimeout(() => {
         const arrivedPlayers = [...get().players];
         arrivedPlayers[turnIndex].positionId = targetId;
@@ -286,7 +324,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
         
         get().processMovementStep();
-    }, 3000); 
+    }, travelTime); 
   },
 
   handleLanding: () => {
@@ -295,16 +333,46 @@ export const useGameStore = create<GameState>((set, get) => ({
     const landedIsland = islands.find(i => i.id === currentPlayer.positionId);
 
     if (!landedIsland) return;
+    
+    const newPlayers = [...players];
+    const currentP = newPlayers[turnIndex];
 
+    // TOURIST LOGIC
+    if (landedIsland.type === 'START') {
+        // Refill Tourists at Piraeus
+        const config = FERRY_CONFIG[currentP.ferryType];
+        const loaded = config.capacity - currentP.tourists;
+        if (loaded > 0) {
+            currentP.tourists = config.capacity;
+            get().addFloatingText(`+${loaded} Tourists`, landedIsland.position, '#3b82f6');
+        }
+        
+        // Pass Go Income
+        const passGoIncome = currentP.ferryType === 'CARGO' ? 400 : 200;
+        currentP.money += passGoIncome;
+        get().addFloatingText(`+${passGoIncome}€`, [landedIsland.position[0], landedIsland.position[1]+1, landedIsland.position[2]], '#22c55e');
+        
+    } else if (landedIsland.type === 'ISLAND' && currentP.tourists > 0) {
+        // Drop off 1 tourist
+        currentP.tourists -= 1;
+        currentP.money += TOURIST_TICKET_PRICE;
+        get().addFloatingText(`Dropped Tourist`, [landedIsland.position[0], landedIsland.position[1]+2, landedIsland.position[2]], '#fbbf24');
+        get().addFloatingText(`+${TOURIST_TICKET_PRICE}€`, [landedIsland.position[0], landedIsland.position[1]+3, landedIsland.position[2]], '#22c55e');
+    }
+
+    set({ players: newPlayers });
+
+    // EVENT LOGIC
     if (landedIsland.type === 'EVENT') {
         get().triggerEvent();
-    } else if (landedIsland.ownerId && landedIsland.ownerId !== currentPlayer.id) {
+    } 
+    // RENT LOGIC
+    else if (landedIsland.ownerId && landedIsland.ownerId !== currentPlayer.id) {
         const owner = players.find(p => p.id === landedIsland.ownerId);
         const multiplier = Math.pow(1.5, landedIsland.level - 1);
         const rent = Math.floor(landedIsland.rent * multiplier);
         
-        const newPlayers = [...get().players];
-        newPlayers[turnIndex].money -= rent;
+        currentP.money -= rent;
         get().addFloatingText(`-${rent}€`, landedIsland.position, '#ef4444');
 
         const ownerIndex = newPlayers.findIndex(p => p.id === landedIsland.ownerId);
@@ -321,13 +389,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         get().checkGameOver();
         setTimeout(() => get().endTurn(), 3000);
 
-    } else if (landedIsland.ownerId === currentPlayer.id) {
+    } 
+    // OWNERSHIP LOGIC
+    else if (landedIsland.ownerId === currentPlayer.id) {
         set({ phase: 'ACTION', message: `Welcome back to ${landedIsland.name}. Upgrade?` });
     } else if (!landedIsland.ownerId && landedIsland.type === 'ISLAND') {
         set({ phase: 'ACTION', message: `Landed on ${landedIsland.name}.` });
     } else {
-        set({ phase: 'ACTION', message: `Relaxing at ${landedIsland.name}.` });
-        setTimeout(() => get().endTurn(), 2000);
+        // Start Tile Logic handles upgrade purchases in UI
+        if (landedIsland.type === 'START') {
+             set({ phase: 'ACTION', message: "Welcome to Piraeus! Load up & Upgrade." });
+        } else {
+             set({ phase: 'ACTION', message: `Relaxing at ${landedIsland.name}.` });
+             setTimeout(() => get().endTurn(), 2000);
+        }
     }
   },
 
@@ -392,6 +467,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
+  buyFerryUpgrade: (type: FerryType) => {
+      const { players, turnIndex } = get();
+      const player = players[turnIndex];
+      const cost = FERRY_CONFIG[type].cost;
+      
+      if (player.money >= cost) {
+          const newPlayers = [...players];
+          newPlayers[turnIndex].money -= cost;
+          newPlayers[turnIndex].ferryType = type;
+          // Refill tourists immediately to new capacity if at start
+          newPlayers[turnIndex].tourists = FERRY_CONFIG[type].capacity;
+          
+          set({ players: newPlayers, message: `Upgraded to ${FERRY_CONFIG[type].name}!` });
+          get().addFloatingText(`-${cost}€`, [-14, 2, 14], '#ef4444'); // Piraeus coords roughly
+      } else {
+          set({ message: "Too expensive!" });
+      }
+  },
+
   skipTurn: () => {
     get().endTurn();
   },
@@ -437,6 +531,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         newPlayers[playerIndex].jailReason = event.title.includes("Strike") ? 'STRIKE' : 'TRAFFIC';
     } 
     else if (event.effectType === 'WEATHER') {
+        // Catamaran immunity check logic is in rollDice
         set({ weather: 'MELTEMI' });
     }
 
@@ -446,9 +541,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   dismissEvent: () => {
       const { weather, currentEvent } = get();
       set({ currentEvent: null });
-      if (currentEvent?.effectType === 'WEATHER' && weather === 'MELTEMI') {
-           // Allow natural weather cycle to clear it next day, or clear after timeout
-      }
       get().checkGameOver();
       get().endTurn();
   },
@@ -458,20 +550,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { currentDay, weather } = get();
       const rand = Math.random();
       
-      // Mid-August (days 10-20) has higher chance of Meltemi
       let meltemiChance = 0.2;
       if (currentDay >= 10 && currentDay <= 20) meltemiChance = 0.5;
       
       let newWeather: WeatherType = 'CLEAR';
-      
-      // If currently Meltemi, 60% chance to stay Meltemi
       if (weather === 'MELTEMI') {
           newWeather = rand < 0.6 ? 'MELTEMI' : 'CLEAR';
       } else {
           newWeather = rand < meltemiChance ? 'MELTEMI' : 'CLEAR';
       }
-      
-      // 5% chance of Heatwave regardless
       if (Math.random() < 0.05) newWeather = 'HEATWAVE';
 
       if (newWeather !== weather) {
@@ -489,7 +576,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     
     if (nextIndex === 0) {
         nextDay += 1;
-        get().updateWeather(); // New day, new weather check
+        get().updateWeather(); 
         
         if (nextDay > maxDays) {
             set({ 
@@ -499,7 +586,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             return;
         }
     }
-    
+
     set({ 
       turnIndex: nextIndex, 
       currentDay: nextDay,

@@ -53,13 +53,15 @@ export const Ferry: React.FC<FerryProps> = ({ player, islands }) => {
 
   }, [currentIsland, destIsland, dockOffset]);
 
+  const travelTime = player.ferryType === 'SPEEDBOAT' ? 2000 : 3000;
+
   useFrame((state, delta) => {
     if (!meshRef.current) return;
 
     if (movementCurve && player.travelDestinationId && isActivePlayer && moveStartTime) {
         // --- MOVING STATE (Synced by Time) ---
         const elapsed = Date.now() - moveStartTime;
-        const progress = Math.min(elapsed / 3000, 1); // 3000ms travel time
+        const progress = Math.min(elapsed / travelTime, 1);
 
         const point = movementCurve.getPoint(progress);
         meshRef.current.position.copy(point);
@@ -70,7 +72,8 @@ export const Ferry: React.FC<FerryProps> = ({ player, islands }) => {
         // Tilt and Pitch
         const turnIntensity = (lookAtPoint.x - point.x) * 2;
         meshRef.current.rotation.z = -turnIntensity * 0.5;
-        meshRef.current.rotation.x = -0.15; // Bow up
+        // Speedboats lift up more
+        meshRef.current.rotation.x = player.ferryType === 'SPEEDBOAT' ? -0.25 : -0.15;
 
     } else if (currentIsland) {
         // --- IDLE STATE ---
@@ -92,11 +95,15 @@ export const Ferry: React.FC<FerryProps> = ({ player, islands }) => {
   const mainColor = player.avatarColor; 
   const deckColor = "#ffffff";
   const windowColor = "#1e293b";
+  
+  // Model Variations
+  const length = player.ferryType === 'CARGO' ? 1.0 : (player.ferryType === 'SPEEDBOAT' ? 0.7 : 0.8);
+  const width = player.ferryType === 'CATAMARAN' ? 0.5 : 0.3;
 
   return (
     <group>
         <Trail 
-            width={1.2} 
+            width={player.ferryType === 'SPEEDBOAT' ? 1.0 : 1.5} 
             length={12} 
             color="#ffffff" 
             attenuation={(t) => t * t}
@@ -104,58 +111,123 @@ export const Ferry: React.FC<FerryProps> = ({ player, islands }) => {
         >
             <group ref={meshRef} position={[0,0,0]}>
                 
-                {/* Status Icons */}
-                {player.isJailed && (
-                    <Billboard position={[0, 1.2, 0]}>
-                        <mesh>
-                           <circleGeometry args={[0.3, 32]} />
-                           <meshBasicMaterial color="white" transparent opacity={0.8} />
-                        </mesh>
-                        <Text 
-                            position={[0, 0, 0.01]} 
-                            fontSize={0.3} 
-                            color="#ef4444"
+                {/* --- DIEGETIC UI: Stats Floating Above Boat --- */}
+                <Billboard position={[0, 2.0, 0]}>
+                     <group>
+                         {/* Money Pill */}
+                         <mesh position={[0, 0.3, 0]} rotation={[0, 0, Math.PI / 2]}>
+                             <capsuleGeometry args={[0.2, 0.6, 4, 8]} />
+                             <meshBasicMaterial color="#1e293b" opacity={0.7} transparent />
+                         </mesh>
+                         <Text 
+                            position={[0, 0.3, 0.2]} 
+                            fontSize={0.25} 
+                            color="#4ade80"
                             anchorX="center" 
                             anchorY="middle"
+                            fontWeight="bold"
                         >
-                            {player.jailReason === 'STRIKE' ? '⚓' : '⛔'}
+                            {player.money}€
                         </Text>
-                    </Billboard>
-                )}
+
+                         {/* Tourists Pill */}
+                         {player.tourists > 0 && (
+                             <group position={[0, 0.75, 0]}>
+                                 <mesh rotation={[0, 0, Math.PI / 2]}>
+                                     <capsuleGeometry args={[0.15, 0.5, 4, 8]} />
+                                     <meshBasicMaterial color="#3b82f6" opacity={0.8} transparent />
+                                 </mesh>
+                                 <Text 
+                                    position={[0, 0, 0.2]} 
+                                    fontSize={0.2} 
+                                    color="white"
+                                    anchorX="center" 
+                                    anchorY="middle"
+                                >
+                                    {player.tourists} ♟
+                                </Text>
+                             </group>
+                         )}
+                     </group>
+
+                     {/* Status Icons */}
+                     {player.isJailed && (
+                         <group position={[0, -0.6, 0]}>
+                            <mesh>
+                               <circleGeometry args={[0.3, 32]} />
+                               <meshBasicMaterial color="white" transparent opacity={0.8} />
+                            </mesh>
+                            <Text 
+                                position={[0, 0, 0.01]} 
+                                fontSize={0.3} 
+                                color="#ef4444"
+                                anchorX="center" 
+                                anchorY="middle"
+                            >
+                                {player.jailReason === 'STRIKE' ? '⚓' : '⛔'}
+                            </Text>
+                         </group>
+                    )}
+                </Billboard>
 
                 {/* --- FERRY MESH --- */}
+                
+                {/* Hull */}
                 <mesh position={[0, 0.1, 0]} castShadow>
-                    <boxGeometry args={[0.3, 0.2, 0.8]} />
+                    <boxGeometry args={[width, 0.2, length]} />
                     <meshStandardMaterial color={mainColor} />
                 </mesh>
-                <mesh position={[0, 0.1, 0.5]} rotation={[0, 0, 0]} castShadow>
-                     <cylinderGeometry args={[0.05, 0.15, 0.2, 4]} />
+                
+                {/* Bow Point */}
+                <mesh position={[0, 0.1, length/2 + 0.1]} rotation={[Math.PI/2, 0, 0]} castShadow>
+                     <coneGeometry args={[width/2, 0.2, 4]} />
                      <meshStandardMaterial color={mainColor} />
                 </mesh>
+
+                {/* Deck */}
                 <mesh position={[0, 0.25, 0]} castShadow>
-                    <boxGeometry args={[0.28, 0.15, 0.7]} />
+                    <boxGeometry args={[width * 0.9, 0.15, length * 0.9]} />
                     <meshStandardMaterial color={deckColor} />
                 </mesh>
-                <mesh position={[0, 0.35, 0.2]} castShadow>
-                    <boxGeometry args={[0.25, 0.15, 0.2]} />
+
+                {/* Bridge / Cabin */}
+                <mesh position={[0, 0.35, length * 0.2]} castShadow>
+                    <boxGeometry args={[width * 0.8, 0.15, length * 0.3]} />
                     <meshStandardMaterial color={deckColor} />
                 </mesh>
-                <mesh position={[0, 0.38, 0.31]}>
-                    <boxGeometry args={[0.22, 0.05, 0.01]} />
+                
+                {/* Windshield */}
+                <mesh position={[0, 0.38, length * 0.36]}>
+                    <boxGeometry args={[width * 0.7, 0.05, 0.01]} />
                     <meshStandardMaterial color={windowColor} roughness={0.2} />
                 </mesh>
-                <mesh position={[0.08, 0.4, -0.2]}>
-                    <cylinderGeometry args={[0.04, 0.04, 0.2]} />
-                    <meshStandardMaterial color={mainColor} />
-                </mesh>
-                <mesh position={[-0.08, 0.4, -0.2]}>
-                    <cylinderGeometry args={[0.04, 0.04, 0.2]} />
-                    <meshStandardMaterial color={mainColor} />
-                </mesh>
-                <mesh position={[0, 0.15, -0.45]} rotation={[-Math.PI/4, 0, 0]}>
-                    <boxGeometry args={[0.25, 0.02, 0.2]} />
+                
+                {/* Smokestacks / Spoiler */}
+                {player.ferryType === 'SPEEDBOAT' ? (
+                     <mesh position={[0, 0.35, -length * 0.3]} rotation={[-0.2, 0, 0]}>
+                        <boxGeometry args={[width, 0.05, 0.2]} />
+                        <meshStandardMaterial color={mainColor} />
+                    </mesh>
+                ) : (
+                    <group>
+                        <mesh position={[width * 0.25, 0.4, -length * 0.25]}>
+                            <cylinderGeometry args={[0.04, 0.04, 0.2]} />
+                            <meshStandardMaterial color={mainColor} />
+                        </mesh>
+                        <mesh position={[-width * 0.25, 0.4, -length * 0.25]}>
+                            <cylinderGeometry args={[0.04, 0.04, 0.2]} />
+                            <meshStandardMaterial color={mainColor} />
+                        </mesh>
+                    </group>
+                )}
+                
+                {/* Propeller Wash / Engine Glow */}
+                <mesh position={[0, 0.15, -length/2 - 0.05]} rotation={[-Math.PI/4, 0, 0]}>
+                    <boxGeometry args={[width * 0.8, 0.02, 0.2]} />
                     <meshStandardMaterial color="#333" />
                 </mesh>
+
+                {/* Player Indicator Cone */}
                 <mesh position={[0, 0.7, 0]} rotation={[Math.PI, 0, 0]}>
                     <coneGeometry args={[0.1, 0.2, 4]} />
                     <meshBasicMaterial color={player.avatarColor} />

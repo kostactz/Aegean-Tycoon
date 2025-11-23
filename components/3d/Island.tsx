@@ -1,13 +1,38 @@
 
+
 import React, { useMemo, useRef } from 'react';
 import { Island as IslandType } from '../../types';
 import { Text, Float } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
+import { useGameStore } from '../../store/gameStore';
+import { DAY_NIGHT_CYCLE_DURATION, CYCLE_PHASE } from '../../constants';
 import * as THREE from 'three';
 
 interface IslandProps {
   data: IslandType;
   ownedByColor?: string;
+}
+
+// Helper for smooth night animation in components
+const useSmoothNightMix = () => {
+    const gameStartTime = useGameStore(state => state.gameStartTime);
+    const mixRef = useRef(0);
+    
+    useFrame(() => {
+        const elapsed = Date.now() - gameStartTime;
+        const progress = (elapsed % DAY_NIGHT_CYCLE_DURATION) / DAY_NIGHT_CYCLE_DURATION;
+        
+        if (progress >= CYCLE_PHASE.SUNSET_START && progress <= CYCLE_PHASE.SUNSET_END) {
+             mixRef.current = (progress - CYCLE_PHASE.SUNSET_START) / (CYCLE_PHASE.SUNSET_END - CYCLE_PHASE.SUNSET_START);
+        } else if (progress > CYCLE_PHASE.SUNSET_END && progress < CYCLE_PHASE.SUNRISE_START) {
+             mixRef.current = 1;
+        } else if (progress >= CYCLE_PHASE.SUNRISE_START && progress <= CYCLE_PHASE.SUNRISE_END) {
+             mixRef.current = 1 - (progress - CYCLE_PHASE.SUNRISE_START) / (CYCLE_PHASE.SUNRISE_END - CYCLE_PHASE.SUNRISE_START);
+        } else {
+             mixRef.current = 0;
+        }
+    });
+    return mixRef;
 }
 
 // --- SUB COMPONENTS ---
@@ -95,20 +120,80 @@ const Church = ({ position }: { position: [number, number, number] }) => (
     </group>
 );
 
-const StoneHouse = ({ position, scale }: { position: [number, number, number], scale: [number, number, number] }) => (
-    <group position={position} scale={scale}>
-        {/* Stone Walls */}
-        <mesh position={[0, 0, 0]}>
-            <boxGeometry args={[1, 1, 1]} />
-            <meshStandardMaterial color="#a8a29e" roughness={0.9} />
-        </mesh>
-        {/* Tiled Roof */}
-        <mesh position={[0, 0.6, 0]} rotation={[0, Math.PI/4, 0]}>
-             <coneGeometry args={[0.8, 0.4, 4]} />
-             <meshStandardMaterial color="#b45309" flatShading />
-        </mesh>
-    </group>
-);
+const StoneHouse = ({ position, scale }: { position: [number, number, number], scale: [number, number, number] }) => {
+    const matRef = useRef<THREE.MeshStandardMaterial>(null);
+    const nightMix = useSmoothNightMix();
+
+    useFrame(() => {
+        if (matRef.current) {
+            // Smoothly ramp emissive intensity based on night mix
+            matRef.current.emissiveIntensity = nightMix.current * 2.0;
+        }
+    });
+
+    return (
+        <group position={position} scale={scale}>
+            {/* Stone Walls */}
+            <mesh position={[0, 0, 0]}>
+                <boxGeometry args={[1, 1, 1]} />
+                <meshStandardMaterial color="#a8a29e" roughness={0.9} />
+            </mesh>
+            {/* Tiled Roof */}
+            <mesh position={[0, 0.6, 0]} rotation={[0, Math.PI/4, 0]}>
+                 <coneGeometry args={[0.8, 0.4, 4]} />
+                 <meshStandardMaterial color="#b45309" flatShading />
+            </mesh>
+            {/* Glowing Window */}
+            <mesh position={[0.2, 0.1, 0.51]}>
+                 <planeGeometry args={[0.2, 0.3]} />
+                 <meshStandardMaterial 
+                    ref={matRef}
+                    color="#44403c" 
+                    emissive="#fbbf24"
+                    emissiveIntensity={0}
+                />
+            </mesh>
+        </group>
+    );
+}
+
+const StandardHouse = ({ position, scale, isHotel }: { position: [number,number,number], scale: [number,number,number], isHotel: boolean }) => {
+    const matRef = useRef<THREE.MeshStandardMaterial>(null);
+    const nightMix = useSmoothNightMix();
+
+    useFrame(() => {
+        if (matRef.current) {
+            matRef.current.emissiveIntensity = nightMix.current * 2.5;
+            // Slightly randomize flicker or delay based on position could be added here for "city waking up" feel
+        }
+    });
+
+    return (
+        <group position={position} scale={scale}>
+            <mesh castShadow>
+                <boxGeometry args={[1, 1, 1]} />
+                <meshStandardMaterial color={isHotel ? "#e2e8f0" : "#ffffff"} roughness={0.2} />
+            </mesh>
+            {/* Dome */}
+            {isHotel && (
+                <mesh position={[0, 0.55, 0]} scale={[0.8, 0.2, 0.8]}>
+                    <sphereGeometry args={[0.5, 16, 16]} />
+                    <meshStandardMaterial color="#3b82f6" />
+                </mesh>
+            )}
+            {/* Window/Door (Emissive) */}
+            <mesh position={[0.2, 0, 0.51]}>
+                <planeGeometry args={[0.2, 0.4]} />
+                <meshStandardMaterial 
+                    ref={matRef}
+                    color="#1e293b" 
+                    emissive="#fbbf24"
+                    emissiveIntensity={0} 
+                />
+            </mesh>
+        </group>
+    );
+}
 
 const Monastery = ({ position }: { position: [number, number, number] }) => (
     <group position={position}>
@@ -126,6 +211,17 @@ const Monastery = ({ position }: { position: [number, number, number] }) => (
 );
 
 const PortPiraeus = ({ data }: { data: IslandType }) => {
+    const lightRef = useRef<THREE.PointLight>(null);
+    const nightMix = useSmoothNightMix();
+    
+    useFrame((state) => {
+        if (lightRef.current) {
+            // Blink red light at night
+            const blink = Math.sin(state.clock.elapsedTime * 5) > 0 ? 1 : 0;
+            lightRef.current.intensity = nightMix.current * 2 * blink;
+        }
+    });
+
     return (
         <group>
             <mesh receiveShadow position={[0, 0, 0]}>
@@ -150,6 +246,12 @@ const PortPiraeus = ({ data }: { data: IslandType }) => {
                     <boxGeometry args={[1.5, 0.1, 0.1]} />
                     <meshStandardMaterial color="#f97316" />
                 </mesh>
+                {/* Warning Light on Crane */}
+                <mesh position={[-0.4, 1.6, 0]}>
+                    <sphereGeometry args={[0.1]} />
+                    <meshBasicMaterial color="red" />
+                    <pointLight ref={lightRef} distance={3} intensity={0} color="red" decay={2} />
+                </mesh>
             </group>
         </group>
     )
@@ -157,10 +259,16 @@ const PortPiraeus = ({ data }: { data: IslandType }) => {
 
 const SeaBuoy = ({ data }: { data: IslandType }) => {
     const ref = useRef<THREE.Group>(null);
+    const lightRef = useRef<THREE.PointLight>(null);
+    const nightMix = useSmoothNightMix();
+
     useFrame((state) => {
         if(ref.current) {
             ref.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.1;
             ref.current.rotation.z = Math.sin(state.clock.elapsedTime * 1.5) * 0.2;
+        }
+        if (lightRef.current) {
+             lightRef.current.intensity = nightMix.current * 1.5;
         }
     })
     return (
@@ -172,13 +280,16 @@ const SeaBuoy = ({ data }: { data: IslandType }) => {
             <mesh position={[0, 1.0, 0]}>
                 <sphereGeometry args={[0.3]} />
                 <meshBasicMaterial color="#fef08a" />
+                <pointLight ref={lightRef} distance={5} intensity={0} color="#ffff00" decay={2} />
             </mesh>
         </group>
     )
 }
 
 export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) => {
-  
+  const nightMix = useSmoothNightMix();
+  const textRef = useRef<THREE.MeshBasicMaterial>(null);
+
   // Procedural Details Generation
   const details = useMemo(() => {
     if (data.type !== 'ISLAND') return { houses: [], trees: [], rocks: [], hasWindmill: false, hasChurch: false, isVolcanic: false, isStone: false, hasMonastery: false, isMilos: false, treeType: 'olive' };
@@ -256,21 +367,42 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
       groundColor = "#78716c"; 
       groundHeight = 0.8;
   }
+  
+  // Use frame to update text colors for visibility at night
+  useFrame(() => {
+       if (textRef.current) {
+           // Lerp text color from dark (day) to light (night)
+           // Day: #1e293b, Night: #cbd5e1
+           const c1 = new THREE.Color("#1e293b");
+           const c2 = new THREE.Color("#cbd5e1");
+           textRef.current.color.lerpColors(c1, c2, nightMix.current);
+       }
+  });
 
   return (
     <group position={data.position}>
         <Float speed={2} rotationIntensity={0} floatIntensity={0.2}>
+            {/* We can't easily ref the Text component's internal material, so we'll just swap colors via prop for now 
+                or accept a slight delay, but since we have useFrame access to nightMix, let's use standard Text 
+                and just update the color prop based on a simple check or use the hook above 
+            */}
+            {/* For simplicity in this "High Fidelity" version, we'll let Text component handle prop updates. 
+                Re-rendering text every frame is bad. 
+                So we will just render it with a color that is visible in both or use the store timeOfDay (1s update) 
+            */}
             <Text
                 position={[0, 3.5, 0]}
                 fontSize={0.6}
-                color="#1e293b"
+                color="black" // Overridden by material if possible, but Text doesn't expose mat ref easily.
                 anchorX="center"
                 anchorY="middle"
                 outlineWidth={0.04}
-                outlineColor="#ffffff"
+                outlineColor="white"
             >
                 {data.name}
+                <meshBasicMaterial ref={textRef} color="#1e293b" />
             </Text>
+            
             {data.type === 'ISLAND' && (
                 <Text
                     position={[0, 3.0, 0]}
@@ -291,7 +423,6 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
         {data.type === 'ISLAND' && (
             <group position={[0, -0.35, 0]}>
                 {/* Terrain Base */}
-                {/* Adjusted Y so it sinks slightly into water */}
                 <mesh castShadow receiveShadow position={[0, (groundHeight / 2), 0]}>
                     <cylinderGeometry args={[1 + (data.level * 0.05), 1.2 + (data.level * 0.05), groundHeight, 7]} />
                     <meshStandardMaterial color={groundColor} roughness={groundRoughness} />
@@ -310,18 +441,17 @@ export const IslandComponent: React.FC<IslandProps> = ({ data, ownedByColor }) =
                         if (details.isStone) {
                              return <StoneHouse key={i} position={h.position} scale={h.scale} />;
                         }
-
+                        
+                        // Standard White House
                         return (
-                            <mesh key={i} position={h.position} scale={h.scale} castShadow>
-                                <boxGeometry args={[1, 1, 1]} />
-                                <meshStandardMaterial color={h.isHotel ? "#e2e8f0" : "#ffffff"} roughness={0.2} />
-                                {(i % 2 === 0 || h.isHotel) && (
-                                    <mesh position={[0, 0.55, 0]} scale={[0.8, 0.2, 0.8]}>
-                                        <sphereGeometry args={[0.5, 16, 16]} />
-                                        <meshStandardMaterial color={h.isHotel ? "#3b82f6" : (i % 3 === 0 ? "#3b82f6" : "#ffffff")} />
+                            <group key={i}>
+                                <StandardHouse position={h.position} scale={h.scale} isHotel={h.isHotel} />
+                                {(i % 2 === 0 || h.isHotel) && !details.isStone && (
+                                    <mesh position={[h.position[0], h.position[1] + 0.55 * h.scale[1]/0.3, h.position[2]]} scale={[0.8, 0.2, 0.8]}>
+                                        {/* Manually placed dome to match transformed parent */}
                                     </mesh>
                                 )}
-                            </mesh>
+                            </group>
                         );
                     })}
                 </group>

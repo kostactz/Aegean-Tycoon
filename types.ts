@@ -4,6 +4,8 @@ export type Phase = 'LOBBY' | 'ROLLING' | 'MOVING' | 'CHOOSING_PATH' | 'ACTION' 
 
 export type WeatherType = 'CLEAR' | 'MELTEMI' | 'HEATWAVE';
 
+export type FerryType = 'STANDARD' | 'SPEEDBOAT' | 'CATAMARAN' | 'CARGO';
+
 export interface Player {
   id: string;
   name: string;
@@ -14,6 +16,10 @@ export interface Player {
   properties: string[]; // IDs of islands owned
   isJailed: boolean; // "Stuck in Kifisos" or "Strike"
   jailReason: 'TRAFFIC' | 'STRIKE' | null;
+  
+  // New Tycoon Mechanics
+  tourists: number; // Current tourists on board
+  ferryType: FerryType;
 }
 
 export interface Island {

@@ -1,8 +1,10 @@
 
+
 import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { MeshReflectorMaterial } from '@react-three/drei';
 import { useGameStore } from '../../store/gameStore';
+import { DAY_NIGHT_CYCLE_DURATION, CYCLE_PHASE } from '../../constants';
 import * as THREE from 'three';
 
 const vertexShader = `
@@ -29,6 +31,7 @@ const fragmentShader = `
   varying vec2 vUv;
   uniform float uTime;
   uniform float uFoamThreshold;
+  uniform float uNightMix;
   
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -46,10 +49,14 @@ const fragmentShader = `
     // Brighter, clearer Aegean colors
     vec3 deepBlue = vec3(0.0, 0.35, 0.6); 
     vec3 turquoise = vec3(0.0, 0.8, 0.95);
+    vec3 nightBlue = vec3(0.0, 0.02, 0.1);
     
     float n = noise(vUv * 20.0 + uTime * 0.4);
     
     vec3 color = mix(deepBlue, turquoise, n * 0.7);
+    
+    // Apply Night Darkening
+    color = mix(color, nightBlue, uNightMix * 0.9);
     
     // Sharp foam edges
     float foamNoise = noise(vUv * 60.0 + uTime * 1.2);
@@ -58,8 +65,11 @@ const fragmentShader = `
     // Intense sparkles for sunny look
     float sparkles = step(0.97, noise(vUv * 100.0 + uTime * 2.5));
     
-    color += foamLevel * 0.9; // Bright white foam
-    color += sparkles * 0.8;
+    color += foamLevel * (0.9 - uNightMix * 0.5); // Dim foam slightly at night
+    
+    // Dim sparkles at night
+    float sparkleIntensity = 0.8 * (1.0 - uNightMix * 0.8);
+    color += sparkles * sparkleIntensity;
     
     // Increased alpha to make the color pop over the dark reflector
     float alpha = 0.4 + (foamLevel * 0.6) + (sparkles * 0.6);
@@ -71,19 +81,33 @@ const fragmentShader = `
 export const Water = () => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const weather = useGameStore(state => state.weather);
+  const gameStartTime = useGameStore(state => state.gameStartTime);
   
   const targetIntensity = useRef(1.0);
   const currentIntensity = useRef(1.0);
 
   useFrame((state, delta) => {
+    // Calculate night mix locally
+    const elapsed = Date.now() - gameStartTime;
+    const progress = (elapsed % DAY_NIGHT_CYCLE_DURATION) / DAY_NIGHT_CYCLE_DURATION;
+    let nightMix = 0;
+    
+    if (progress >= CYCLE_PHASE.SUNSET_START && progress <= CYCLE_PHASE.SUNSET_END) {
+             nightMix = (progress - CYCLE_PHASE.SUNSET_START) / (CYCLE_PHASE.SUNSET_END - CYCLE_PHASE.SUNSET_START);
+    } else if (progress > CYCLE_PHASE.SUNSET_END && progress < CYCLE_PHASE.SUNRISE_START) {
+             nightMix = 1;
+    } else if (progress >= CYCLE_PHASE.SUNRISE_START && progress <= CYCLE_PHASE.SUNRISE_END) {
+             nightMix = 1 - (progress - CYCLE_PHASE.SUNRISE_START) / (CYCLE_PHASE.SUNRISE_END - CYCLE_PHASE.SUNRISE_START);
+    }
+
     if (materialRef.current) {
       targetIntensity.current = weather === 'MELTEMI' ? 2.5 : 1.0;
       currentIntensity.current = THREE.MathUtils.lerp(currentIntensity.current, targetIntensity.current, delta * 0.5);
 
       materialRef.current.uniforms.uTime.value = state.clock.getElapsedTime();
       materialRef.current.uniforms.uWaveIntensity.value = currentIntensity.current;
-      // Lower threshold = more foam during Meltemi
       materialRef.current.uniforms.uFoamThreshold.value = weather === 'MELTEMI' ? 0.75 : 0.92;
+      materialRef.current.uniforms.uNightMix.value = nightMix;
     }
   });
 
@@ -119,7 +143,8 @@ export const Water = () => {
                 uniforms={{
                     uTime: { value: 0 },
                     uWaveIntensity: { value: 1.0 },
-                    uFoamThreshold: { value: 0.92 }
+                    uFoamThreshold: { value: 0.92 },
+                    uNightMix: { value: 0 }
                 }}
                 transparent
                 depthWrite={false}
