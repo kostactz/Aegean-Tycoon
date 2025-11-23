@@ -1,8 +1,8 @@
 
 import React, { Suspense, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Environment, Sky, Line, Cloud } from '@react-three/drei';
-import { EffectComposer, TiltShift, Bloom, Vignette } from '@react-three/postprocessing';
+import { Environment, Sky, Line, SoftShadows } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { Water } from './Water';
 import { IslandComponent } from './Island';
 import { Ferry } from './Ferry';
@@ -55,40 +55,44 @@ const RouteLines = () => {
     return <group>{lines}</group>;
 }
 
-const Clouds = () => {
-    return (
-        <group>
-            <Cloud position={[-10, 5, -10]} opacity={0.5} speed={0.2} bounds={[10, 1.5, 10]} segments={20} />
-            <Cloud position={[10, 4, 5]} opacity={0.4} speed={0.2} bounds={[10, 1.5, 10]} segments={20} color="#ecfeff" />
-            <Cloud position={[0, 8, -5]} opacity={0.3} speed={0.1} bounds={[20, 2, 20]} segments={30} />
-        </group>
-    )
-}
-
 export const GameScene = () => {
   const islands = useGameStore(state => state.islands);
   const players = useGameStore(state => state.players);
 
   return (
-    <Canvas shadows camera={{ position: [8, 8, 8], fov: 45 }} dpr={[1, 2]}>
+    <Canvas 
+      shadows="soft" // Enable soft shadows
+      camera={{ position: [8, 12, 15], fov: 45 }} 
+      dpr={[1, 1.5]} // Limit pixel ratio for performance with reflections
+    >
       <Suspense fallback={null}>
-        {/* Lighting adjustments for natural "Deep Mediterranean" look */}
-        <ambientLight intensity={0.5} />
-        <directionalLight 
-            position={[30, 50, 20]} 
-            intensity={1.2} 
-            castShadow 
-            shadow-mapSize={[2048, 2048]}
-            shadow-camera-left={-30}
-            shadow-camera-right={30}
-            shadow-camera-top={30}
-            shadow-camera-bottom={-30}
-        />
-        <Environment preset="sunset" />
-        <Sky sunPosition={[30, 50, 20]} turbidity={0.3} rayleigh={0.7} mieCoefficient={0.005} />
+        {/* SUNNY LIGHTING SETUP */}
+        <ambientLight intensity={0.9} />
         
-        <Clouds />
+        <directionalLight 
+            position={[50, 80, 30]} // High Noon Sun
+            intensity={2.5} 
+            castShadow 
+            shadow-bias={-0.0005}
+            shadow-mapSize={[2048, 2048]}
+            shadow-camera-left={-40}
+            shadow-camera-right={40}
+            shadow-camera-top={40}
+            shadow-camera-bottom={-40}
+        />
 
+        {/* High contrast environment for reflections */}
+        <Environment preset="city" />
+        
+        {/* Crystal clear sunny sky */}
+        <Sky 
+            sunPosition={[50, 80, 30]} 
+            turbidity={0.05} 
+            rayleigh={0.12} 
+            mieCoefficient={0.002} 
+            mieDirectionalG={0.8} 
+        />
+        
         {/* Cinematic Director */}
         <CameraRig />
 
@@ -117,12 +121,10 @@ export const GameScene = () => {
             <Ferry key={player.id} player={player} islands={islands} />
         ))}
 
-        {/* Post Processing: Reduced blur and glare for cleaner look */}
+        {/* Post Processing: Clean look */}
         <EffectComposer>
-            <Bloom luminanceThreshold={0.9} intensity={0.3} />
-            {/* Extremely subtle tilt shift, almost fully clear */}
-            <TiltShift focusDistance={0.5} focalLength={0.8} bokehScale={0.1} />
-            <Vignette eskil={false} offset={0.1} darkness={0.4} />
+            <Bloom luminanceThreshold={1.1} intensity={0.2} />
+            <Vignette eskil={false} offset={0.1} darkness={0.3} />
         </EffectComposer>
       </Suspense>
     </Canvas>
