@@ -58,9 +58,9 @@ const RouteLines = () => {
 const Clouds = () => {
     return (
         <group>
-            <Cloud position={[-10, 5, -10]} opacity={0.5} speed={0.2} width={10} depth={1.5} segments={20} />
-            <Cloud position={[10, 4, 5]} opacity={0.4} speed={0.2} width={10} depth={1.5} segments={20} color="#ecfeff" />
-            <Cloud position={[0, 8, -5]} opacity={0.3} speed={0.1} width={20} depth={2} segments={30} />
+            <Cloud position={[-10, 5, -10]} opacity={0.5} speed={0.2} bounds={[10, 1.5, 10]} segments={20} />
+            <Cloud position={[10, 4, 5]} opacity={0.4} speed={0.2} bounds={[10, 1.5, 10]} segments={20} color="#ecfeff" />
+            <Cloud position={[0, 8, -5]} opacity={0.3} speed={0.1} bounds={[20, 2, 20]} segments={30} />
         </group>
     )
 }

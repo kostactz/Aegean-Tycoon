@@ -156,8 +156,8 @@ export const Ferry: React.FC<FerryProps> = ({ player, islands }) => {
                     <boxGeometry args={[0.25, 0.02, 0.2]} />
                     <meshStandardMaterial color="#333" />
                 </mesh>
-                <mesh position={[0, 0.7, 0]}>
-                    <coneGeometry args={[0.1, 0.2, 4]} rotation={[Math.PI, 0, 0]} />
+                <mesh position={[0, 0.7, 0]} rotation={[Math.PI, 0, 0]}>
+                    <coneGeometry args={[0.1, 0.2, 4]} />
                     <meshBasicMaterial color={player.avatarColor} />
                 </mesh>
             </group>

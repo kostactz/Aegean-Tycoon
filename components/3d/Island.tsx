@@ -118,8 +118,8 @@ const Monastery = ({ position }: { position: [number, number, number] }) => (
             <meshStandardMaterial color="white" />
         </mesh>
         {/* Top arch */}
-        <mesh position={[0, 1.2, 0]}>
-            <cylinderGeometry args={[0.2, 0.2, 0.1]} rotation={[Math.PI/2, 0, 0]} />
+        <mesh position={[0, 1.2, 0]} rotation={[Math.PI/2, 0, 0]}>
+            <cylinderGeometry args={[0.2, 0.2, 0.1]} />
             <meshStandardMaterial color="white" />
         </mesh>
     </group>
